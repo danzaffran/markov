@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bike Loop Animation</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center; /* Center #mainContainer horizontally */
+            align-items: center;    /* Center #mainContainer vertically */
+            min-height: 100vh;
+            background-color: #e0e0e0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            padding: 20px; /* Add some padding around the main content */
+            box-sizing: border-box;
+        }
+
+        #mainContainer {
+            display: flex;
+            flex-direction: row; /* Canvas on left, controls on right */
+            align-items: flex-start; /* Align tops */
+            gap: 25px; /* Space between canvas and controls */
+        }
+
+        canvas {
+            border: 1px solid #aaa;
+            background-color: #fff;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border-radius: 8px; /* Optional: rounded corners for canvas */
+        }
+
+        #controls {
+            background: #f8f9fa; /* Lighter, modern background */
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column; /* Stack control groups vertically */
+            gap: 20px; /* Increased gap between control groups */
+            width: 280px; /* Fixed width for the control panel */
+            border: 1px solid #dee2e6; /* Subtle border */
+        }
+
+        #controls > div {
+            display: flex;
+            flex-direction: column;
+        }
+
+        #controls label {
+            margin-bottom: 6px;
+            font-size: 0.9em;
+            color: #495057; /* Darker grey for labels */
+            font-weight: 500;
+        }
+
+        #controls input[type="number"],
+        #controls input[type="range"] {
+            width: 100%; /* Full width within their container */
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        #controls input[type="range"] {
+            padding-left: 0; /* Align range slider better */
+            padding-right: 0;
+        }
+
+
+        #controls button {
+            padding: 10px 15px;
+            background-color: #007bff; /* Modern blue */
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
+        }
+
+        #controls button:hover {
+            background-color: #0056b3; /* Darker blue on hover */
+        }
+
+        #controls button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+            color: #666666;
+        }
+    </style>
+</head>
+<body>
+    <div id="mainContainer">
+        <canvas id="animationCanvas"></canvas>
+
+        <div id="controls">
+            <div>
+                <label for="initialDots">Bikes per Station: <span id="initialDotsValue">15</span></label>
+                <input type="number" id="initialDots" min="1" max="100" value="15">
+            </div>
+            <div>
+                <label for="pauseDuration">Pause Duration (s): <span id="pauseDurationValue">0.1</span></label>
+                <input type="number" id="pauseDuration" min="0.1" max="10" step="0.1" value="0.1">
+            </div>
+            <div>
+                <label for="dotSpeed">Bike Speed: <span id="dotSpeedValue">0.003</span></label>
+                <input type="range" id="dotSpeed" min="0.001" max="0.05" step="0.001" value="0.003">
+            </div>
+            <button id="startButton" disabled>Start / Restart Animation</button>
+        </div>
+    </div>
+
+    <script>
+        const csvData = `0.54382,0.08109,0.06937,0.11661,0.17025,0.07161,0.13270,0.14191
+0.10156,0.25821,0.13694,0.18728,0.26612,0.13151,0.32949,0.39357
+0.05405,0.10249,0.09189,0.10247,0.09587,0.16797,0.30596,0.00998
+0.04586,0.06020,0.04955,0.18375,0.05289,0.09505,0.05709,0.27772
+0.03358,0.06368,0.03694,0.02591,0.11570,0.15755,0.03205,0.10366
+0.01638,0.04826,0.08829,0.04829,0.12562,0.12500,0.03505,0.00610
+0.14087,0.27910,0.51171,0.10365,0.10579,0.23438,0.09114,0.01552
+0.06388,0.10697,0.01532,0.23204,0.06777,0.01693,0.01652,0.05155`;
+
+        const canvas = document.getElementById('animationCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const NUM_DISKS = 8;
+        const PATH_CURVATURE_FACTOR = 0.4; 
+        const DOT_SCATTER_FACTOR = 0.7; 
+        const SELF_LOOP_EXTENT_MULTIPLIER = 3.0; 
+
+        const BIKE_DRAW_WIDTH = 38; 
+        const BIKE_DRAW_HEIGHT = 30;
+
+        const IMAGE_REFERENCE_SIZE = 1024;    
+        const DISK_ABS_RADIUS = 113;          
+        const LAYOUT_ABS_RADIUS = 320;       
+        const RIM_THICKNESS_ABS = 20;    
+        const PERCENTAGE_TEXT_OFFSET_ABS = 8; 
+
+        let probabilityMatrix = [];
+        const disks = []; 
+        const dots = []; 
+        const masterPaths = [];
+        let canvasCenterX, canvasCenterY;
+
+        let animationPhase = 'IDLE'; 
+        let phaseTimer = 0;
+        let lastTime = 0;
+        let animationFrameId;
+        let totalDotsInSystem = 0; 
+        let movingDotsCount = 0;
+
+        let initialDotsPerDiskSetting = 15; // Default changed
+        let pauseDurationSetting = 0.1;     
+        let dotSpeedSetting = 0.003;    
+
+        const initialDotsInput = document.getElementById('initialDots');
+        const initialDotsValueSpan = document.getElementById('initialDotsValue');
+        const pauseDurationInput = document.getElementById('pauseDuration');
+        const pauseDurationValueSpan = document.getElementById('pauseDurationValue');
+        const dotSpeedSlider = document.getElementById('dotSpeed');
+        const dotSpeedValueSpan = document.getElementById('dotSpeedValue');
+        const startButton = document.getElementById('startButton');
+        // Removed: currentPhaseDisplay, phaseTimerDisplay, totalDotsDisplay, diskCountsContainer
+
+        const diskBackgroundImage = new Image(); 
+        const bikeImages = [];
+        const bikeImageFilenames = [ 
+            'bike_1_red_transparent.png',    
+            'bike_2_orange_transparent.png', 
+            'bike_3_light_green_transparent.png',  
+            'bike_4_light_blue_transparent.png',
+            'bike_5_medium_blue_transparent.png',
+            'bike_6_teal_transparent.png',   
+            'bike_7_purple_transparent.png', 
+            'bike_8_pink_transparent.png'    
+        ];
+        let loadedAssetCount = 0;
+        const totalAssetsToLoad = 1 + NUM_DISKS; 
+
+        let drawOrder = [];
+
+        const percentageLabelPositions = [
+            { x: 513, y: 95 }, { x: 824, y: 200 }, { x: 927, y: 439 }, { x: 870, y: 770 },
+            { x: 512, y: 940 }, { x: 150, y: 770 }, { x: 98,  y: 444 }, { x: 200, y: 200 }
+        ];
+
+        function assetLoaded() {
+            loadedAssetCount++;
+            if (loadedAssetCount === totalAssetsToLoad) {
+                startButton.disabled = false;
+                console.log("All assets loaded. Animation ready.");
+                if (canvas.width > 0 && animationPhase === 'IDLE') {
+                    initVisualsOnly();
+                }
+            }
+        }
+
+        diskBackgroundImage.onload = assetLoaded;
+        diskBackgroundImage.onerror = () => {
+            console.error("Failed to load background image 'background.png'.");
+            alert("Failed to load disk background image. Visuals will be incomplete.");
+            assetLoaded(); 
+        };
+        diskBackgroundImage.src = 'background.png'; 
+
+        for (let i = 0; i < NUM_DISKS; i++) {
+            const img = new Image();
+            img.onload = assetLoaded;
+            img.onerror = () => {
+                console.error(`Failed to load bike image: ${bikeImageFilenames[i]}`);
+                alert(`Failed to load bike image: ${bikeImageFilenames[i]}. Some bikes may not appear.`);
+                assetLoaded(); 
+            };
+            img.src = bikeImageFilenames[i];
+            bikeImages.push(img);
+        }
+        
+        initialDotsInput.addEventListener('input', (e) => {
+            initialDotsPerDiskSetting = parseInt(e.target.value) || 15; // Default to 15 if parse fails
+            initialDotsValueSpan.textContent = initialDotsPerDiskSetting;
+        });
+        pauseDurationInput.addEventListener('input', (e) => {
+            pauseDurationSetting = parseFloat(e.target.value) || 0.1;
+            pauseDurationValueSpan.textContent = pauseDurationSetting.toFixed(1);
+        });
+        dotSpeedSlider.addEventListener('input', (e) => {
+            dotSpeedSetting = parseFloat(e.target.value);
+            dotSpeedValueSpan.textContent = dotSpeedSetting.toFixed(3);
+        });
+        startButton.addEventListener('click', initAnimation);
+
+        function updateControlDisplayValues() {
+            initialDotsInput.value = initialDotsPerDiskSetting;
+            initialDotsValueSpan.textContent = initialDotsPerDiskSetting;
+            pauseDurationInput.value = pauseDurationSetting;
+            pauseDurationValueSpan.textContent = pauseDurationSetting.toFixed(1);
+            dotSpeedSlider.value = dotSpeedSetting;
+            dotSpeedValueSpan.textContent = dotSpeedSetting.toFixed(3);
+        }
+        function getRandomPointInDisk(disk) {
+            const angle = Math.random() * 2 * Math.PI;
+            const scaleFactor = canvas.width / IMAGE_REFERENCE_SIZE; // Though canvas.width is fixed at 1024 now
+            const currentRimThickness = RIM_THICKNESS_ABS * scaleFactor;
+            const innerRadius = disk.radius - currentRimThickness;
+            const bikeSafeMargin = Math.max(BIKE_DRAW_WIDTH, BIKE_DRAW_HEIGHT) / 2 * 0.5; 
+            const maxRadiusOffset = innerRadius * DOT_SCATTER_FACTOR - bikeSafeMargin;
+            const radiusOffset = Math.random() * Math.max(0, maxRadiusOffset);
+            return { x: disk.x + radiusOffset * Math.cos(angle), y: disk.y + radiusOffset * Math.sin(angle) };
+        }
+        function transpose(matrix) {
+            const rows = matrix.length; if (rows === 0) return []; const cols = matrix[0].length;
+            const T = Array(cols).fill(null).map(() => Array(rows).fill(0));
+            for (let i = 0; i < rows; i++) { for (let j = 0; j < cols; j++) { T[j][i] = matrix[i][j]; } } return T;
+        }
+        function parseAndNormalizeCSV() {
+            const rowsText = csvData.trim().split('\n');
+            let M_orig = rowsText.map(rowStr => {
+                const values = rowStr.split(',').map(Number);
+                if (values.length !== NUM_DISKS) { console.error(`CSV row error`); return Array(NUM_DISKS).fill(0); } return values;
+            });
+             if (M_orig.length !== NUM_DISKS) { console.error(`CSV row count error`); M_orig = Array(NUM_DISKS).fill(null).map(() => Array(NUM_DISKS).fill(1/NUM_DISKS));}
+            let P_for_simulation = transpose(M_orig);
+            probabilityMatrix = P_for_simulation.map((rowValues, rowIndex) => {
+                const sum = rowValues.reduce((acc, val) => acc + val, 0);
+                if (Math.abs(sum - 1.0) < 1e-5 && sum !== 0) { return rowValues; }
+                else if (sum === 0) { const stayProbArray = Array(NUM_DISKS).fill(0); stayProbArray[rowIndex] = 1; return stayProbArray;}
+                else { return rowValues.map(v => v / sum); }
+            });
+        }
+        function setupDisks() {
+            disks.length = 0;
+            canvas.width = 1024; // Fixed canvas size
+            canvas.height = 1024;
+            canvasCenterX = canvas.width / 2;
+            canvasCenterY = canvas.height / 2;
+            
+            const diskCenters = [ // These are still hardcoded based on the 1024x1024 background
+                { x: 512, y: 228 }, { x: 750, y: 322 }, { x: 834, y: 553 }, { x: 720, y: 765 },
+                { x: 512, y: 822 }, { x: 304, y: 765 }, { x: 190, y: 553 }, { x: 274, y: 322 }
+            ];
+            
+            for (let i = 0; i < NUM_DISKS; i++) {
+                const center = diskCenters[i];
+                disks.push({
+                    id: i,
+                    x: center.x,
+                    y: center.y,
+                    radius: DISK_ABS_RADIUS, // This is an absolute pixel value for 1024px ref
+                    dotCount: 0,
+                    percentage: 0
+                });
+            }
+        }
+        function defineMasterPaths() {
+            masterPaths.length = 0;
+            for (let i = 0; i < NUM_DISKS; i++) {
+                masterPaths[i] = [];
+                for (let j = 0; j < NUM_DISKS; j++) {
+                    const startDisk = disks[i]; const endDisk = disks[j];
+                    if (i === j) { 
+                        const diskVecX = startDisk.x - canvasCenterX; const diskVecY = startDisk.y - canvasCenterY;
+                        const distToCenter = Math.sqrt(diskVecX*diskVecX + diskVecY*diskVecY);
+                        const normOutwardX = diskVecX / (distToCenter || 1); const normOutwardY = diskVecY / (distToCenter || 1);
+                        const controlPointOffset = startDisk.radius * SELF_LOOP_EXTENT_MULTIPLIER;
+                        masterPaths[i][j] = {
+                            startX: startDisk.x, startY: startDisk.y,
+                            cpX: startDisk.x + normOutwardX * controlPointOffset, cpY: startDisk.y + normOutwardY * controlPointOffset,
+                            endX: startDisk.x, endY: startDisk.y 
+                        }; continue;
+                    }
+                    const midX = (startDisk.x + endDisk.x) / 2; const midY = (startDisk.y + endDisk.y) / 2;
+                    const dx = endDisk.x - startDisk.x; const dy = endDisk.y - startDisk.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    const offsetX = -dy / dist * dist * PATH_CURVATURE_FACTOR; const offsetY = dx / dist * dist * PATH_CURVATURE_FACTOR;
+                    masterPaths[i][j] = {startX: startDisk.x, startY: startDisk.y, cpX: midX + offsetX, cpY: midY + offsetY, endX: endDisk.x, endY: endDisk.y};
+                }
+            }
+        }
+        function setupDots() { 
+            dots.length = 0;
+            totalDotsInSystem = 0; 
+            disks.forEach(disk => disk.dotCount = 0);
+            for (let i = 0; i < NUM_DISKS; i++) {
+                disks[i].dotCount = initialDotsPerDiskSetting; 
+                totalDotsInSystem += initialDotsPerDiskSetting;
+                for (let j = 0; j < initialDotsPerDiskSetting; j++) {
+                    const initialPos = getRandomPointInDisk(disks[i]);
+                    dots.push({ 
+                        id: dots.length, 
+                        initialDiskId: i, 
+                        currentDisk: i, 
+                        targetDisk: i, 
+                        x: initialPos.x, y: initialPos.y,
+                        startX: initialPos.x, startY: initialPos.y,
+                        cpX: initialPos.x, cpY: initialPos.y, endX: initialPos.x, endY: initialPos.y,
+                        progress: 1.0, isMoving: false
+                    });
+                }
+            }
+            // Removed totalDotsDisplay.textContent update
+            drawOrder = dots.slice();
+            for (let i = drawOrder.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [drawOrder[i], drawOrder[j]] = [drawOrder[j], drawOrder[i]];
+            }
+        }
+        function chooseDestination(sourceDiskIndex) {
+            const probs = probabilityMatrix[sourceDiskIndex];
+            if (!probs || probs.length !== NUM_DISKS) { return sourceDiskIndex;}
+            let rand = Math.random(); let cumulativeProb = 0;
+            for (let i = 0; i < probs.length; i++) { cumulativeProb += probs[i]; if (rand < cumulativeProb) return i; }
+            return probs.length - 1; 
+        }
+        function getQuadraticBezierPoint(t, p0x, p0y, p1x, p1y, p2x, p2y) {
+            const mt = 1 - t;
+            return { x: mt * mt * p0x + 2 * mt * t * p1x + t * t * p2x, y: mt * mt * p0y + 2 * mt * t * p1y + t * t * p2y };
+        }
+        function transitionToMovingPhase() {
+            animationPhase = 'MOVING'; phaseTimer = 0; movingDotsCount = 0; 
+            dots.forEach(dot => {
+                dot.targetDisk = chooseDestination(dot.currentDisk);
+                if (dot.targetDisk !== dot.currentDisk) { disks[dot.currentDisk].dotCount--; }
+                dot.startX = dot.x; dot.startY = dot.y;
+                const targetDiskForPos = disks[dot.targetDisk];
+                const targetPosInDisk = getRandomPointInDisk(targetDiskForPos);
+                dot.endX = targetPosInDisk.x; dot.endY = targetPosInDisk.y;
+                const masterPath = masterPaths[dot.currentDisk][dot.targetDisk];
+                const masterPathMidX = (masterPath.startX + masterPath.endX) / 2;
+                const masterPathMidY = (masterPath.startY + masterPath.endY) / 2;
+                const masterBulgeVectorX = masterPath.cpX - masterPathMidX;
+                const masterBulgeVectorY = masterPath.cpY - masterPathMidY;
+                const dotActualMidX = (dot.startX + dot.endX) / 2;
+                const dotActualMidY = (dot.startY + dot.endY) / 2;
+                dot.cpX = dotActualMidX + masterBulgeVectorX; dot.cpY = dotActualMidY + masterBulgeVectorY;
+                dot.progress = 0; dot.isMoving = true; movingDotsCount++;
+            });
+        }
+        function calculateDiskPercentages() {
+            if (totalDotsInSystem > 0) { disks.forEach(disk => { disk.percentage = (disk.dotCount / totalDotsInSystem) * 100; });}
+            else { disks.forEach(disk => { disk.percentage = 0; }); }
+        }
+        function transitionToPausePhase(nextPhase = 'POST_MOVE_PAUSE') {
+            animationPhase = nextPhase; phaseTimer = 0; calculateDiskPercentages();
+            
+            // Dot count mismatch check (previously in updateUIDisplay)
+            let currentTotalInDisks = 0; disks.forEach(d => currentTotalInDisks += d.dotCount);
+            if ( (animationPhase === 'POST_MOVE_PAUSE' || animationPhase === 'INIT_PAUSE') && currentTotalInDisks !== totalDotsInSystem) {
+                 if (totalDotsInSystem > 0 && animationPhase !== 'IDLE') { 
+                     console.warn(`Dot count mismatch! Expected ${totalDotsInSystem}, got ${currentTotalInDisks}. Phase: ${animationPhase}`);
+                 }
+            }
+        }
+        function updateDotsMovement() {
+             dots.forEach(dot => {
+                if (dot.isMoving) {
+                    dot.progress += dotSpeedSetting;
+                    if (dot.progress >= 1.0) {
+                        dot.progress = 1.0; dot.x = dot.endX; dot.y = dot.endY;
+                        dot.isMoving = false; movingDotsCount--;
+                        if (dot.targetDisk !== dot.currentDisk) { disks[dot.targetDisk].dotCount++; }
+                        dot.currentDisk = dot.targetDisk; 
+                        dot.startX = dot.x; dot.startY = dot.y; dot.cpX = dot.x; dot.cpY = dot.y; dot.endX = dot.x; dot.endY = dot.y;
+                    } else {
+                        const pos = getQuadraticBezierPoint(dot.progress, dot.startX, dot.startY, dot.cpX, dot.cpY, dot.endX, dot.endY);
+                        dot.x = pos.x; dot.y = pos.y;
+                    }
+                }
+            });
+            if (movingDotsCount === 0 && animationPhase === 'MOVING') { transitionToPausePhase('POST_MOVE_PAUSE');}
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Use canvas.width/height
+            if (diskBackgroundImage.complete && diskBackgroundImage.naturalHeight !== 0) {
+                ctx.drawImage(diskBackgroundImage, 0, 0, canvas.width, canvas.height);
+            } else {
+                ctx.fillStyle = "#f0f0f0";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "black";
+                ctx.textAlign = "center";
+                ctx.font = "16px sans-serif";
+                ctx.fillText("Loading assets...", canvas.width / 2, canvas.height / 2);
+                return;
+            }
+
+            // The radial percentage drawing logic was commented out, so no change needed there.
+            // We only keep the hardcoded position drawing part.
+
+            drawOrder.forEach(bike => {
+                const bikeImg = bikeImages[bike.initialDiskId]; 
+                if (bikeImg && bikeImg.complete && bikeImg.naturalHeight !== 0) {
+                    ctx.drawImage(
+                        bikeImg,
+                        bike.x - BIKE_DRAW_WIDTH / 2, 
+                        bike.y - BIKE_DRAW_HEIGHT / 2, 
+                        BIKE_DRAW_WIDTH, 
+                        BIKE_DRAW_HEIGHT
+                    );
+                }
+            });
+
+            // Draw percentage labels at hardcoded positions ONLY
+            disks.forEach((disk, index) => {
+                ctx.fillStyle = 'black';
+                // Using canvas.width for scaleFactor is not directly relevant here as positions are hardcoded in pixels
+                // Assuming the font size should be absolute for these hardcoded positions
+                ctx.font = `36px cursive, "Comic Sans MS", "Brush Script MT", sans-serif`; 
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const textX = percentageLabelPositions[index].x;
+                const textY = percentageLabelPositions[index].y;
+                ctx.fillText(`${disk.percentage.toFixed(1)}%`, textX, textY);
+            });
+        }
+
+        // updateUIDisplay function removed
+
+        function gameLoop(currentTime) {
+            const deltaTime = (currentTime - (lastTime || currentTime)) / 1000; lastTime = currentTime;
+            if (animationPhase !== 'IDLE') { phaseTimer += deltaTime; }
+            switch (animationPhase) {
+                case 'INIT_PAUSE': if (phaseTimer >= pauseDurationSetting) { transitionToMovingPhase(); } break;
+                case 'MOVING': updateDotsMovement(); break;
+                case 'POST_MOVE_PAUSE': if (phaseTimer >= pauseDurationSetting) { transitionToMovingPhase(); } break;
+            }
+            draw(); 
+            // Removed updateUIDisplay() call
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+        function initAnimation() {
+            let allAssetsReadyForAnim = diskBackgroundImage.complete && diskBackgroundImage.naturalHeight !== 0;
+            for(const bikeImg of bikeImages) { if (!bikeImg.complete || bikeImg.naturalHeight === 0) { allAssetsReadyForAnim = false; break;}}
+
+            if (!allAssetsReadyForAnim) {
+                console.log("Waiting for all assets to load before starting animation.");
+                alert("Assets not loaded yet. Please wait or check console for errors.");
+                return;
+            }
+            if (animationFrameId) { cancelAnimationFrame(animationFrameId); }
+            updateControlDisplayValues(); 
+            parseAndNormalizeCSV(); setupDisks(); defineMasterPaths(); setupDots();       
+            animationPhase = 'INIT_PAUSE'; phaseTimer = 0; lastTime = 0; movingDotsCount = 0;
+            calculateDiskPercentages(); 
+            // Removed updateUIDisplay() call
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+        function initVisualsOnly() {
+            setupDisks(); // This sets canvas width/height
+            disks.forEach(d => d.dotCount = 0); 
+            totalDotsInSystem = 0; 
+            calculateDiskPercentages(); 
+            draw(); 
+            // Removed updateUIDisplay() call
+        }
+        
+        updateControlDisplayValues(); 
+        parseAndNormalizeCSV(); 
+        
+        // Initial setup: ensure canvas has dimensions before trying to draw placeholder text
+        // Setting canvas dimensions early also helps if initVisualsOnly is called before images fully load.
+        canvas.width = 1024; // Match setupDisks
+        canvas.height = 1024;
+
+
+        if (loadedAssetCount === totalAssetsToLoad) { // All assets might be cached and loaded quickly
+             initVisualsOnly();
+        } else { // Still loading
+            ctx.clearRect(0,0,canvas.width, canvas.height);
+            ctx.fillStyle = "black"; ctx.textAlign = "center"; ctx.font = "16px sans-serif";
+            ctx.fillText("Loading assets...", canvas.width / 2, canvas.height / 2);
+        }
+        console.log("Script loaded. Waiting for assets and Start button.");
+
+    </script>
+</body>
+</html>

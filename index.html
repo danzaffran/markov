@@ -52,7 +52,7 @@
             border: 1px solid #e0e0e0; 
         }
 
-        #controls > div { /* Removed toggleFlowButton from selector */
+        #controls > div {
             display: flex;
             flex-direction: column;
         }
@@ -105,7 +105,6 @@
             box-shadow: none;
         }
 
-        /* Toggle button styles removed */
 
         #matrixDisplayContainer {
             padding: 15px;
@@ -158,11 +157,10 @@
                     <label for="dotSpeed">Bike Speed: <span id="dotSpeedValue">0.003</span></label>
                     <input type="range" id="dotSpeed" min="0.001" max="0.05" step="0.001" value="0.003">
                 </div>
-                <!-- Toggle button removed -->
                 <button id="startButton" disabled>Start / Restart Animation</button>
             </div>
             <div id="matrixDisplayContainer">
-                <h3>Transition Probability Matrix</h3> <!-- Subtitle removed -->
+                <h3>Transition Matrix</h3> <!-- MODIFIED TITLE -->
                 <!-- Matrix table will be inserted here by JavaScript -->
             </div>
         </div>
@@ -217,7 +215,6 @@
         const dotSpeedSlider = document.getElementById('dotSpeed');
         const dotSpeedValueSpan = document.getElementById('dotSpeedValue');
         const startButton = document.getElementById('startButton');
-        // toggleFlowButton variable removed
 
         const diskBackgroundImage = new Image(); 
         const bikeImages = [];
@@ -236,7 +233,6 @@
             { x: 512, y: 940 }, { x: 150, y: 770 }, { x: 98,  y: 444 }, { x: 200, y: 200 }
         ];
 
-        // showFlowOnHover variable removed
         let hoveredDiskIndex = null;
         const HOVER_ARROW_COLOR = 'rgba(70, 70, 70, 0.4)'; 
         const HOVER_TEXT_COLOR = 'rgba(0, 0, 0, 0.9)';     
@@ -244,9 +240,16 @@
 
         let isFirstStart = true;
 
+        // MODIFIED stationColors array
         const stationColors = [ 
-            '#FF6B6B', '#FFA07A', '#98FB98', '#ADD8E6',
-            '#6495ED', '#48D1CC', '#DA70D6', '#FFB6C1'
+            '#e5655c', // Red (Top, Station 0)
+            '#e2ac38', // Yellow (Top-Right, Station 1)
+            '#98c54c', // Green (Right, Station 2)
+            '#56bb8e', // Teal (Bottom-Right, Station 3)
+            '#57aace', // Light Blue (Bottom, Station 4)
+            '#5278b8', // Medium Blue (Bottom-Left, Station 5)
+            '#a371c1', // Purple (Left, Station 6)
+            '#dd5ead'  // Pink (Top-Left, Station 7)
         ];
         function getContrastingTextColor(hexcolor){
             if (!hexcolor) return '#000000';
@@ -298,7 +301,6 @@
         });
         startButton.addEventListener('click', initAnimation);
 
-        // Toggle button event listener removed
 
         function updateControlDisplayValues() {
             initialDotsInput.value = initialDotsPerDiskSetting;
@@ -381,7 +383,7 @@
         function setupDots() { 
             dots.length = 0;
             totalDotsInSystem = 0; 
-            disks.forEach(disk => disk.dotCount = 0); // Reset disk counts
+            disks.forEach(disk => disk.dotCount = 0); 
             for (let i = 0; i < NUM_DISKS; i++) {
                 disks[i].dotCount = initialDotsPerDiskSetting; 
                 totalDotsInSystem += initialDotsPerDiskSetting;
@@ -413,7 +415,6 @@
             phaseTimer = 0; 
             movingDotsCount = 0; 
             dots.forEach(dot => {
-                // Bike is leaving its currentDisk
                 disks[dot.currentDisk].dotCount--; 
 
                 dot.targetDisk = chooseDestination(dot.currentDisk);
@@ -454,7 +455,6 @@
                         dot.progress = 1.0; dot.x = dot.endX; dot.y = dot.endY;
                         dot.isMoving = false; movingDotsCount--;
                         
-                        // Bike arrives at its target disk
                         disks[dot.targetDisk].dotCount++; 
                         
                         dot.currentDisk = dot.targetDisk; 
@@ -475,13 +475,11 @@
             } else {
                 ctx.fillStyle = "#f0f0f0"; ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.fillStyle = "black"; ctx.textAlign = "center"; ctx.font = "16px sans-serif";
-                ctx.fillText("Loading assets...", canvas.width / 2, canvas.height / 2);
-                return; 
+                ctx.fillText("Loading background...", canvas.width / 2, canvas.height / 2);
             }
 
             drawOrder.forEach(bike => {
                 let bikeAlpha = 1.0;
-                // Flow display is always on conceptually, depends on hoveredDiskIndex
                 if (hoveredDiskIndex !== null) { 
                     if (bike.currentDisk !== hoveredDiskIndex) { 
                         bikeAlpha = 0.1; 
@@ -492,6 +490,14 @@
                 const bikeImg = bikeImages[bike.initialDiskId]; 
                 if (bikeImg && bikeImg.complete && bikeImg.naturalHeight !== 0) {
                     ctx.drawImage(bikeImg, bike.x - BIKE_DRAW_WIDTH / 2, bike.y - BIKE_DRAW_HEIGHT / 2, BIKE_DRAW_WIDTH, BIKE_DRAW_HEIGHT);
+                } else if (bikeImg && bikeImg.src && !bikeImg.complete) {
+                    // Placeholder for loading bike image
+                } else {
+                    // Fallback for failed/missing bike image
+                    ctx.fillStyle = stationColors[bike.initialDiskId % stationColors.length] || '#888888';
+                    ctx.beginPath();
+                    ctx.arc(bike.x, bike.y, BIKE_DRAW_WIDTH / 4, 0, 2 * Math.PI);
+                    ctx.fill();
                 }
                 ctx.globalAlpha = 1.0; 
             });
@@ -503,7 +509,6 @@
                 ctx.fillText(`${disk.percentage.toFixed(1)}%`, percentageLabelPositions[index].x, percentageLabelPositions[index].y);
             });
 
-            // Arrow drawing logic (depends on hoveredDiskIndex)
             if (hoveredDiskIndex !== null && probabilityMatrix.length > 0 && masterPaths.length > 0) {
                 const sourceProbs = probabilityMatrix[hoveredDiskIndex];
                 for (let targetIdx = 0; targetIdx < NUM_DISKS; targetIdx++) {
@@ -551,7 +556,6 @@
             
             const titleH3 = matrixDisplayDiv.querySelector('h3');
             if (!matrix || matrix.length === 0) {
-                 // "Probability data not available yet." message removed
                  return;
             }
 
@@ -559,11 +563,11 @@
             const thead = table.createTHead();
             const headerRow = thead.insertRow();
             let th = document.createElement('th');
-            th.textContent = 'S'; // Shorter corner header
+            th.textContent = 'from \\ to'; // MODIFIED top-left cell text
             headerRow.appendChild(th);
             for (let j = 0; j < NUM_DISKS; j++) { 
                 th = document.createElement('th');
-                th.textContent = j;
+                th.textContent = '';
                 th.style.backgroundColor = stationColors[j % stationColors.length];
                 th.style.color = getContrastingTextColor(stationColors[j % stationColors.length]);
                 headerRow.appendChild(th);
@@ -573,7 +577,7 @@
             matrix.forEach((row, i) => {
                 const tr = tbody.insertRow();
                 const rowHeaderCell = document.createElement('th');
-                rowHeaderCell.textContent = i;
+                rowHeaderCell.textContent = '';
                 rowHeaderCell.style.backgroundColor = stationColors[i % stationColors.length];
                 rowHeaderCell.style.color = getContrastingTextColor(stationColors[i % stationColors.length]);
                 tr.appendChild(rowHeaderCell);
@@ -611,7 +615,7 @@
 
             if (isFirstStart) {
                 const expectedDotCount = NUM_DISKS * initialDotsPerDiskSetting;
-                if (dots.length !== expectedDotCount || !dots.every(d => disks.some(disk => disk.id === d.currentDisk))) {
+                if (dots.length !== expectedDotCount || totalDotsInSystem !== expectedDotCount) {
                     setupDots(); 
                 }
                 calculateDiskPercentages();
@@ -628,14 +632,13 @@
         }
 
         function initVisualsOnly(placeInitialDots = false) { 
-            parseAndNormalizeCSV(); 
-            setupDisks(); 
-            defineMasterPaths(); 
+            if(probabilityMatrix.length === 0) parseAndNormalizeCSV(); 
+            if(disks.length === 0) setupDisks(); 
+            if(masterPaths.length === 0) defineMasterPaths(); 
 
             if (placeInitialDots) {
                 setupDots(); 
-            } else { 
-                dots.length = 0; 
+            } else if (dots.length === 0) { 
                 totalDotsInSystem = 0;
                 disks.forEach(d => d.dotCount = 0);
             }
@@ -645,8 +648,7 @@
         }
         
         canvas.addEventListener('mousemove', (event) => {
-            // Flow display is always on, depends on hoveredDiskIndex
-            if (disks.length === 0) { // Check if disks are ready
+            if (disks.length === 0) { 
                  if (hoveredDiskIndex !== null) { 
                     hoveredDiskIndex = null;
                     if (!animationFrameId) requestAnimationFrame(draw); 
@@ -678,22 +680,22 @@
         });
 
         updateControlDisplayValues(); 
-        canvas.width = 1024; 
-        canvas.height = 1024;
+        if (canvas.width === 0 || canvas.height === 0) {
+             canvas.width = 1024; 
+             canvas.height = 1024;
+        }
 
-        if (loadedAssetCount === totalAssetsToLoad && diskBackgroundImage.complete && bikeImages.every(img => img.complete)) {
-             initVisualsOnly(true); 
-        } else { 
+
+        if (loadedAssetCount < totalAssetsToLoad) {
             ctx.clearRect(0,0,canvas.width, canvas.height);
             ctx.fillStyle = "black"; ctx.textAlign = "center"; ctx.font = "16px sans-serif";
-            if(diskBackgroundImage.src && !diskBackgroundImage.complete) { 
-                ctx.fillText("Loading assets...", canvas.width / 2, canvas.height / 2);
-            } else { 
-                ctx.fillText("Loading assets (or some failed)...", canvas.width / 2, canvas.height / 2);
-            }
+            ctx.fillText("Loading assets...", canvas.width / 2, canvas.height / 2);
             displayProbabilityMatrix([]); 
+        } else if (animationPhase === 'IDLE') { 
+             initVisualsOnly(true);
         }
-        console.log("Script loaded. UI updated. Waiting for assets and Start button.");
+        
+        console.log("Script loaded. UI updated. Waiting for assets and Start button if not already enabled.");
 
     </script>
 </body>

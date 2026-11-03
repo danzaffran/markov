@@ -4,7 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bike Loop Animation</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
     <style>
+        :root {
+            --cell: 52px;                          /* one square matrix cell */
+            --matrix-w: calc(9 * var(--cell));     /* 1 header + 8 data columns */
+            --panel-w: calc(var(--matrix-w) + 32px);
+        }
+
         body {
             margin: 0;
             display: flex;
@@ -28,8 +36,9 @@
         #rightPanelColumn { 
             display: flex;
             flex-direction: column;
-            align-items: flex-start;
+            align-items: stretch;
             gap: 20px;
+            width: var(--panel-w);
         }
 
         canvas {
@@ -41,13 +50,15 @@
 
         #controls {
             background: #f8f9fa;
-            padding: 25px; 
+            padding: 12px 15px; 
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             display: flex;
-            flex-direction: column;
-            gap: 22px; 
-            width: 280px; 
+            flex-direction: row;          /* horizontal, to save vertical space */
+            flex-wrap: wrap;
+            align-items: flex-end;
+            gap: 12px; 
+            width: 100%; 
             box-sizing: border-box;
             border: 1px solid #e0e0e0; 
         }
@@ -55,11 +66,15 @@
         #controls > div {
             display: flex;
             flex-direction: column;
+            flex: 0 0 auto;
         }
+        #controls > div.narrow { width: 74px; }             /* Bikes per Station, Pause */
+        #controls > div.grow { flex: 1 1 110px; min-width: 110px; }
 
         #controls label {
-            margin-bottom: 8px; 
-            font-size: 0.9em;
+            margin-bottom: 5px; 
+            font-size: 0.72em;
+            line-height: 1.2;
             color: #343a40; 
             font-weight: 500;
         }
@@ -67,11 +82,11 @@
         #controls input[type="number"],
         #controls input[type="range"] {
             width: 100%;
-            padding: 10px; 
+            padding: 6px; 
             box-sizing: border-box;
             border: 1px solid #ced4da;
             border-radius: 4px;
-            font-size: 0.9em;
+            font-size: 0.85em;
             background-color: #fff;
         }
         #controls input[type="range"] {
@@ -81,12 +96,15 @@
 
 
         #controls button { 
-            padding: 10px 15px;
+            flex: 0 0 auto;
+            width: 110px;
+            padding: 7px 8px;
             color: white;
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            font-size: 0.95em;
+            font-size: 0.75em;
+            line-height: 1.2;
             font-weight: 500;
             transition: background-color 0.2s ease, box-shadow 0.2s ease;
             text-align: center;
@@ -112,7 +130,7 @@
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             border: 1px solid #e0e0e0;
-            width: fit-content; 
+            width: 100%; 
             max-width: 100%; 
             overflow-x: auto; 
             box-sizing: border-box;
@@ -124,20 +142,81 @@
             color: #343a40;
             text-align: center;
         }
+        #matrixDisplayContainer h3 sup {
+            font-size: 0.62em;
+            vertical-align: super;
+        }
+        /* 9 x 9 equally sized cells (1 header + 8 data each way) => the table reads square */
         #matrixDisplayContainer table {
             border-collapse: collapse;
-            font-size: 0.8em; 
+            table-layout: fixed;
+            width: var(--matrix-w);
+            margin: 0 auto;
+            font-size: 0.78em; 
         }
         #matrixDisplayContainer th, #matrixDisplayContainer td {
             border: 1px solid #ccc;
-            padding: 5px 7px; 
+            padding: 2px; 
             text-align: center;
-            min-width: 40px; 
+            vertical-align: middle;
+            width: var(--cell);
+            height: var(--cell);
+            box-sizing: border-box;
+            overflow: hidden;
         }
         #matrixDisplayContainer th { 
             background-color: #e9ecef;
             font-weight: bold;
         }
+        #matrixDisplayContainer th.cornerCell {
+            font-size: 0.7em;
+            font-weight: 600;
+            line-height: 1.3;
+            padding: 2px 1px;
+        }
+        #matrixDisplayContainer th.cornerCell span {
+            display: block;
+            white-space: nowrap;
+        }
+        #matrixDisplayContainer th.cornerCell .cornerTop {
+            color: #495057;
+        }
+
+        /* --- LaTeX (KaTeX) blocks --- */
+        .mathBlock {
+            font-size: 10.5px;        /* array renders ~377px wide = 0.8x the old 469px table */
+            text-align: center;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        .mathBlock .katex-display {
+            margin: 0.2em 0;
+        }
+
+        #powerDisplayContainer {
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            border: 1px solid #e0e0e0;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        #powerDisplayContainer h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+            color: #343a40;
+            text-align: center;
+        }
+        #powerCaption {
+            margin: 14px 0 0;
+            font-size: 0.8em;
+            line-height: 1.5;
+            color: #495057;
+        }
+        #powerCaption strong { color: #343a40; }
     </style>
 </head>
 <body>
@@ -145,23 +224,34 @@
         <canvas id="animationCanvas"></canvas>
         <div id="rightPanelColumn">
             <div id="controls">
-                <div>
+                <div class="narrow">
                     <label for="initialDots">Bikes per Station: <span id="initialDotsValue">15</span></label>
                     <input type="number" id="initialDots" min="1" max="100" value="15">
                 </div>
-                <div>
+                <div class="narrow">
                     <label for="pauseDuration">Pause: <span id="pauseDurationValue">1.0</span>s</label>
                     <input type="number" id="pauseDuration" min="0.1" max="10" step="0.1" value="1.0">
                 </div>
-                <div>
+                <div class="grow">
                     <label for="dotSpeed">Bike Speed: <span id="dotSpeedValue">0.003</span></label>
                     <input type="range" id="dotSpeed" min="0.001" max="0.05" step="0.001" value="0.003">
                 </div>
                 <button id="startButton" disabled>Start / Restart Animation</button>
             </div>
             <div id="matrixDisplayContainer">
-                <h3>Transition Matrix</h3> <!-- MODIFIED TITLE -->
-                <!-- Matrix table will be inserted here by JavaScript -->
+                <h3>Transition Matrix M</h3>
+                <div id="matrixMath" class="mathBlock"></div>
+            </div>
+            <div id="powerDisplayContainer">
+                <h3>After <span id="monthCount">0</span> months</h3>
+                <div id="powerMath" class="mathBlock"></div>
+                <p id="powerCaption">
+                    Each entry is the share of the bikes that <em>started</em> at the row's station
+                    and are parked at the column's station after
+                    <strong>k&nbsp;=&nbsp;<span id="captionK">0</span></strong> months.
+                    Every row totals 1.000, i.e. 100&nbsp;% (so 0.544 means 54.4&nbsp;%).
+                    The bikes on the left are one random sample of this process.
+                </p>
             </div>
             <div id="citationBox" style="padding: 15px; background-color: #f8f9fa; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid #e0e0e0; width: fit-content; max-width: 100%; box-sizing: border-box; margin-top: 20px;">
                 <p style="margin: 0; font-size: 0.9em; color: #343a40;"> &copy; Dan Zaffran, based on Sect. 7.2 Markov Chains, in <a href="https://lqbrin.github.io/tea-time-linear/" style="color: #007bff; text-decoration: none;">Tea Time Linear Algebra</a>, by Leon Brin.</p>
@@ -242,6 +332,10 @@
         const HOVER_TEXT_FONT = 'bold 26px sans-serif';    
 
         let isFirstStart = true;
+
+        // Matrix powers: after k completed animation steps the panel shows M^(k+1).
+        let stepCount = 0;          // k
+        let displayedMatrix = [];   // M^(k+1)
 
         // MODIFIED stationColors array
         const stationColors = [ 
@@ -326,6 +420,89 @@
             const rows = matrix.length; if (rows === 0) return []; const cols = matrix[0].length;
             const T = Array(cols).fill(null).map(() => Array(rows).fill(0));
             for (let i = 0; i < rows; i++) { for (let j = 0; j < cols; j++) { T[j][i] = matrix[i][j]; } } return T;
+        }
+        function multiplyMatrices(A, B) {
+            const n = A.length;
+            const C = Array.from({ length: n }, () => Array(n).fill(0));
+            for (let i = 0; i < n; i++) {
+                for (let k = 0; k < n; k++) {
+                    const a = A[i][k];
+                    if (a === 0) continue;
+                    for (let j = 0; j < n; j++) C[i][j] += a * B[k][j];
+                }
+            }
+            return C;
+        }
+        function identityMatrix(n) {
+            return Array.from({ length: n }, (_, i) =>
+                   Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+        }
+        function resetMatrixPower() {           // back to k = 0 months, so M^0 = I
+            if (probabilityMatrix.length === 0) parseAndNormalizeCSV();
+            stepCount = 0;
+            displayedMatrix = identityMatrix(NUM_DISKS);
+            renderFixedMatrix();
+            renderPowerMatrix();
+        }
+        function advanceMatrixPower() {         // one month elapsed: M^k -> M^(k+1)
+            if (probabilityMatrix.length === 0) return;
+            if (displayedMatrix.length === 0) displayedMatrix = identityMatrix(NUM_DISKS);
+            stepCount++;
+            displayedMatrix = multiplyMatrices(displayedMatrix, probabilityMatrix);
+            renderPowerMatrix();
+        }
+
+        // ---------- LaTeX typesetting (KaTeX, with a plain-table fallback) ----------
+        const MATRIX_ROW_GAP = '0.5em';     // extra leading, to square the block up
+
+        function swatchTex(i) {
+            const c = stationColors[i % stationColors.length];
+            return '\\textcolor{' + c + '}{\\rule[-0.3em]{2.1em}{1.15em}}';
+        }
+        function matrixTex(lhs, matrix) {
+            const corner = '\\substack{\\text{\\% going}\\\\\\text{from}\\,\\backslash\\,\\text{to}}';
+            const header = corner + ' & ' +
+                Array.from({ length: NUM_DISKS }, (_, j) => swatchTex(j)).join(' & ') +
+                ' \\\\ \\hline ';
+            const body = matrix.map((row, i) =>
+                swatchTex(i) + ' & ' + row.map(v => v.toFixed(3)).join(' & ')
+            ).join(' \\\\[' + MATRIX_ROW_GAP + '] ');
+            return lhs + ' \\;=\\; \\begin{array}{c|' + 'c'.repeat(NUM_DISKS) + '} ' +
+                   header + body + ' \\end{array}';
+        }
+        function renderTex(el, lhs, matrix) {
+            if (!el) return;
+            if (!matrix || matrix.length === 0) { el.innerHTML = ''; return; }
+            if (window.katex) {
+                katex.render(matrixTex(lhs, matrix), el, { displayMode: true, throwOnError: false });
+            } else {
+                fallbackTable(el, matrix);   // KaTeX did not load
+            }
+        }
+        function fallbackTable(el, matrix) {
+            let html = '<table><thead><tr><th class="cornerCell">' +
+                       '<span class="cornerTop">% going</span>' +
+                       '<span class="cornerBottom">from \\ to</span></th>';
+            for (let j = 0; j < NUM_DISKS; j++) {
+                html += '<th style="background:' + stationColors[j % stationColors.length] + '"></th>';
+            }
+            html += '</tr></thead><tbody>';
+            matrix.forEach((row, i) => {
+                html += '<tr><th style="background:' + stationColors[i % stationColors.length] + '"></th>' +
+                        row.map(v => '<td>' + v.toFixed(3) + '</td>').join('') + '</tr>';
+            });
+            el.innerHTML = html + '</tbody></table>';
+        }
+        function renderFixedMatrix() {          // M itself: drawn once, never changes
+            if (probabilityMatrix.length === 0) parseAndNormalizeCSV();
+            renderTex(document.getElementById('matrixMath'), 'M', probabilityMatrix);
+        }
+        function renderPowerMatrix() {          // M^k, redrawn after every month
+            renderTex(document.getElementById('powerMath'), 'M^{' + stepCount + '}', displayedMatrix);
+            const mc = document.getElementById('monthCount');
+            if (mc) mc.textContent = stepCount;
+            const ck = document.getElementById('captionK');
+            if (ck) ck.textContent = stepCount;
         }
         function parseAndNormalizeCSV() {
             const rowsText = csvData.trim().split('\n');
@@ -468,7 +645,10 @@
                     }
                 }
             });
-            if (movingDotsCount === 0 && animationPhase === 'MOVING') transitionToPausePhase('POST_MOVE_PAUSE');
+            if (movingDotsCount === 0 && animationPhase === 'MOVING') {
+                advanceMatrixPower();   // a month just elapsed -> display M^(k+1)
+                transitionToPausePhase('POST_MOVE_PAUSE');
+            }
         }
 
         function draw() {
@@ -552,48 +732,6 @@
             }
         }
 
-        function displayProbabilityMatrix(matrix) { 
-            if (!matrixDisplayDiv) return;
-            const existingTable = matrixDisplayDiv.querySelector('table');
-            if (existingTable) existingTable.remove();
-            
-            const titleH3 = matrixDisplayDiv.querySelector('h3');
-            if (!matrix || matrix.length === 0) {
-                 return;
-            }
-
-            const table = document.createElement('table');
-            const thead = table.createTHead();
-            const headerRow = thead.insertRow();
-            let th = document.createElement('th');
-            th.textContent = 'from \\ to'; // MODIFIED top-left cell text
-            headerRow.appendChild(th);
-            for (let j = 0; j < NUM_DISKS; j++) { 
-                th = document.createElement('th');
-                th.textContent = '';
-                th.style.backgroundColor = stationColors[j % stationColors.length];
-                th.style.color = getContrastingTextColor(stationColors[j % stationColors.length]);
-                headerRow.appendChild(th);
-            }
-
-            const tbody = table.createTBody();
-            matrix.forEach((row, i) => {
-                const tr = tbody.insertRow();
-                const rowHeaderCell = document.createElement('th');
-                rowHeaderCell.textContent = '';
-                rowHeaderCell.style.backgroundColor = stationColors[i % stationColors.length];
-                rowHeaderCell.style.color = getContrastingTextColor(stationColors[i % stationColors.length]);
-                tr.appendChild(rowHeaderCell);
-
-                row.forEach(prob => {
-                    const cell = tr.insertCell();
-                    cell.textContent = prob.toFixed(3);
-                });
-            });
-             if (titleH3) titleH3.insertAdjacentElement('afterend', table);
-             else matrixDisplayDiv.appendChild(table);
-        }
-
         function gameLoop(currentTime) {
             const deltaTime = (currentTime - (lastTime || currentTime)) / 1000; lastTime = currentTime;
             if (animationPhase !== 'IDLE') phaseTimer += deltaTime;
@@ -615,6 +753,7 @@
             if(masterPaths.length === 0) defineMasterPaths();
             
             updateControlDisplayValues(); 
+            resetMatrixPower();          // a restart puts the display back to M
 
             if (isFirstStart) {
                 const expectedDotCount = NUM_DISKS * initialDotsPerDiskSetting;
@@ -646,7 +785,7 @@
                 disks.forEach(d => d.dotCount = 0);
             }
             calculateDiskPercentages(); 
-            displayProbabilityMatrix(probabilityMatrix); 
+            resetMatrixPower(); 
             requestAnimationFrame(draw); 
         }
         
@@ -693,7 +832,7 @@
             ctx.clearRect(0,0,canvas.width, canvas.height);
             ctx.fillStyle = "black"; ctx.textAlign = "center"; ctx.font = "16px sans-serif";
             ctx.fillText("Loading assets...", canvas.width / 2, canvas.height / 2);
-            displayProbabilityMatrix([]); 
+            resetMatrixPower(); 
         } else if (animationPhase === 'IDLE') { 
              initVisualsOnly(true);
         }

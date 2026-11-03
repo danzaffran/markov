@@ -227,10 +227,36 @@
 
         /* --- LaTeX (KaTeX) blocks --- */
         .mathBlock {
-            font-size: 10.5px;        /* array renders ~377px wide = 0.8x the old 469px table */
+            font-size: 14px;
             text-align: center;
             overflow-x: auto;
             overflow-y: hidden;
+        }
+        /* Matrix centred under the bikes; citation as small print at its bottom right */
+        #footer {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: end;
+            gap: 16px;
+            width: 100%;
+        }
+        #footer #matrixDisplayContainer { grid-column: 2; }
+        #citation {
+            grid-column: 3;
+            justify-self: end;
+            max-width: 190px;
+            margin: 0;
+            font-size: 0.7em;
+            line-height: 1.4;
+            color: #6c757d;
+            text-align: right;
+        }
+        #citation a { color: #007bff; text-decoration: none; }
+        @media (max-width: 760px) {
+            .mathBlock { font-size: 11px; }
+            #footer { grid-template-columns: 1fr; justify-items: center; }
+            #footer #matrixDisplayContainer, #citation { grid-column: 1; }
+            #citation { max-width: none; justify-self: end; }
         }
         .mathBlock .katex-display {
             margin: 0.2em 0;
@@ -289,9 +315,12 @@
                 </div>
             </details>
         </div>
+        <div id="footer">
         <div id="matrixDisplayContainer">
             <h3>Transition Matrix M</h3>
             <div id="matrixMath" class="mathBlock"></div>
+        </div>
+        <p id="citation">&copy; Dan Zaffran, based on Sect. 7.2 Markov Chains, in <a href="https://lqbrin.github.io/tea-time-linear/">Tea Time Linear Algebra</a>, by Leon Brin.</p>
         </div>
         <!-- M^k panel, removed from the page (its CSS and JS are still here; uncomment to bring it back)
         <div id="powerDisplayContainer">
@@ -306,9 +335,6 @@
             </p>
         </div>
         -->
-        <div id="citationBox" style="padding: 15px; background-color: #f8f9fa; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid #e0e0e0; width: fit-content; max-width: 100%; box-sizing: border-box;">
-            <p style="margin: 0; font-size: 0.9em; color: #343a40;"> &copy; Dan Zaffran, based on Sect. 7.2 Markov Chains, in <a href="https://lqbrin.github.io/tea-time-linear/" style="color: #007bff; text-decoration: none;">Tea Time Linear Algebra</a>, by Leon Brin.</p>
-        </div>
     </div>
 
     <script>
@@ -752,14 +778,12 @@
                     if (prob < 0.001) continue; 
                     const path = masterPaths[hoveredDiskIndex][targetIdx];
                     
-                    ctx.beginPath();
-                    ctx.moveTo(path.startX, path.startY);
-                    ctx.quadraticCurveTo(path.cpX, path.cpY, path.endX, path.endY);
-                    
-                    const currentArrowLineWidth = 5 + 50 * prob; 
-                    ctx.lineWidth = Math.max(0.5, currentArrowLineWidth); 
-                    ctx.strokeStyle = HOVER_ARROW_COLOR; 
-                    ctx.stroke();
+                    const currentArrowLineWidth = Math.max(0.5, 5 + 50 * prob);
+                    const at = t => getQuadraticBezierPoint(t, path.startX, path.startY, path.cpX, path.cpY, path.endX, path.endY);
+                    const target = disks[targetIdx];
+                    let tTip = 1;                       // where the path enters the target rim
+                    while (tTip > 0 && Math.hypot(at(tTip).x - target.x, at(tTip).y - target.y) < target.radius) tTip -= 0.002;
+                    drawArrow(at, tTip, currentArrowLineWidth);
                     
                     const textT = 0.5; 
                     const textPoint = getQuadraticBezierPoint(textT, path.startX, path.startY, path.cpX, path.cpY, path.endX, path.endY);
@@ -784,12 +808,41 @@
             }
         }
 
-        // Stay-put arrow: a teardrop leaving the disk outward and coming back,
-        // shortened where needed so the loop and its label stay on the canvas.
-        function drawSelfLoop(i, prob) {
-            if (prob < 0.001) return;
-            const disk = disks[i];
-            const lineWidth = Math.max(0.5, 5 + 50 * prob);
+        // Arrow along the curve at(t), t in [0, tTip]: the line stops where the
+        // head begins (the colour is see-through, so they must not overlap).
+        function drawArrow(at, tTip, lineWidth) {
+            const headLen = 16 + 1.1 * lineWidth;
+            const headHalfW = 10 + 0.9 * lineWidth;
+            const tip = at(tTip);
+            let tBase = tTip;
+            while (tBase > 0 && Math.hypot(at(tBase).x - tip.x, at(tBase).y - tip.y) < headLen) tBase -= 0.002;
+            const base = at(tBase);
+            ctx.beginPath();
+            const steps = 60;
+            const p0 = at(0);
+            ctx.moveTo(p0.x, p0.y);
+            for (let k = 1; k <= steps; k++) { const q = at(tBase * k / steps); ctx.lineTo(q.x, q.y); }
+            ctx.lineWidth = lineWidth;
+            ctx.lineCap = 'butt';
+            ctx.strokeStyle = HOVER_ARROW_COLOR;
+            ctx.stroke();
+
+            const dx = tip.x - base.x, dy = tip.y - base.y, d = Math.hypot(dx, dy) || 1;
+            const nx = -dy / d, ny = dx / d;
+            ctx.beginPath();
+            ctx.moveTo(tip.x, tip.y);
+            ctx.lineTo(base.x + nx * headHalfW, base.y + ny * headHalfW);
+            ctx.lineTo(base.x - nx * headHalfW, base.y - ny * headHalfW);
+            ctx.closePath();
+            ctx.fillStyle = HOVER_ARROW_COLOR;
+            ctx.fill();
+        }
+
+        // Stay-put arrow: a loop that leaves the station's rim on one side, swings
+        // outward and comes back to the rim, shortened where needed so the loop
+        // and its label stay on the canvas.
+        function selfLoopCurve(i, lineWidth) {
+            const disk = disks[i], r = disk.radius;
             let ux = disk.x - canvasCenterX, uy = disk.y - canvasCenterY;
             const len = Math.hypot(ux, uy) || 1; ux /= len; uy /= len;
             let room = Infinity;                       // centre-to-edge distance along (ux, uy)
@@ -797,23 +850,31 @@
             if (ux < 0) room = Math.min(room, -disk.x / ux);
             if (uy > 0) room = Math.min(room, (canvas.height - disk.y) / uy);
             if (uy < 0) room = Math.min(room, -disk.y / uy);
-            const reach = Math.min(disk.radius + 55, room - lineWidth / 2 - 10);   // tip distance
-            const spread = 0.6;                         // half-angle of the teardrop (rad)
-            const L = reach / (0.75 * Math.cos(spread)); // cubic with these controls peaks at 0.75 L cos
-            const c1x = disk.x + L * (ux * Math.cos(spread) - uy * Math.sin(spread));
-            const c1y = disk.y + L * (uy * Math.cos(spread) + ux * Math.sin(spread));
-            const c2x = disk.x + L * (ux * Math.cos(spread) + uy * Math.sin(spread));
-            const c2y = disk.y + L * (uy * Math.cos(spread) - ux * Math.sin(spread));
-            ctx.beginPath();
-            ctx.moveTo(disk.x, disk.y);
-            ctx.bezierCurveTo(c1x, c1y, c2x, c2y, disk.x, disk.y);
-            ctx.lineWidth = lineWidth;
-            ctx.strokeStyle = HOVER_ARROW_COLOR;
-            ctx.stroke();
+            const reach = Math.min(r + 70, room - lineWidth / 2 - 22);   // tip distance from centre
+            const a = 0.5, b = 0.45;                   // rim points at +-a; controls lean out by +-b
+            const rot = (ang) => [ux * Math.cos(ang) - uy * Math.sin(ang), uy * Math.cos(ang) + ux * Math.sin(ang)];
+            const [e1x, e1y] = rot(a), [e2x, e2y] = rot(-a), [d1x, d1y] = rot(b), [d2x, d2y] = rot(-b);
+            const K = Math.max(20, (reach - r * Math.cos(a)) / (0.75 * Math.cos(b)));
+            const P0 = [disk.x + r * e1x, disk.y + r * e1y], P3 = [disk.x + r * e2x, disk.y + r * e2y];
+            const P1 = [P0[0] + K * d1x, P0[1] + K * d1y], P2 = [P3[0] + K * d2x, P3[1] + K * d2y];
+            const at = t => { const m = 1 - t, A = m*m*m, B = 3*m*m*t, C = 3*m*t*t, D = t*t*t;
+                return { x: A*P0[0] + B*P1[0] + C*P2[0] + D*P3[0], y: A*P0[1] + B*P1[1] + C*P2[1] + D*P3[1] }; };
+            return { at, ux, uy, reach };
+        }
+        function drawSelfLoop(i, prob) {
+            if (prob < 0.001) return;
+            const disk = disks[i];
+            const lineWidth = Math.max(0.5, 5 + 50 * prob);
+            const { at, ux, uy, reach } = selfLoopCurve(i, lineWidth);
+            drawArrow(at, 1, lineWidth);
 
             // Label beside the loop, on the side away from the station's own % label
-            const along = 0.65 * reach;
-            const side = 0.29 * L * Math.sin(spread) + lineWidth / 2 + 45;
+            let side = 0;
+            for (let t = 0; t <= 1; t += 0.05) {
+                const q = at(t); side = Math.max(side, Math.abs(-(q.x - disk.x) * uy + (q.y - disk.y) * ux));
+            }
+            side += lineWidth / 2 + 45;
+            const along = 0.85 * reach;
             const stationLabel = percentageLabelPositions[i];
             const candidates = [1, -1].map(sgn => ({
                 x: Math.min(canvas.width - 45, Math.max(45, disk.x + ux * along - sgn * uy * side)),

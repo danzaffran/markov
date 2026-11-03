@@ -25,24 +25,35 @@
             box-sizing: border-box;
         }
 
-        #mainContainer { 
+        #mainContainer {
             display: flex;
             flex-direction: row;
-            align-items: flex-start; 
+            flex-wrap: wrap;              /* panel drops below the canvas in narrow frames */
+            justify-content: center;
+            align-items: flex-start;
             gap: 25px;
-            width: fit-content;
+            width: 100%;
+            max-width: calc(1026px + 25px + var(--panel-w));
         }
 
-        #rightPanelColumn { 
+        #rightPanelColumn {
             display: flex;
             flex-direction: column;
             align-items: stretch;
             gap: 20px;
             width: var(--panel-w);
+            max-width: 100%;
         }
 
+        /* Scales down to fit the window (or an iframe, e.g. in Canvas LMS);
+           the drawing itself stays 1024 x 1024. */
         canvas {
-            border: 1px solid #ccc; 
+            flex: 1 1 400px;
+            min-width: 0;
+            max-width: min(1024px, calc(100vh - 40px));
+            height: auto;
+            aspect-ratio: 1 / 1;
+            border: 1px solid #ccc;
             background-color: #fff;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             border-radius: 8px;
@@ -798,8 +809,9 @@
                 return;
             }
             const rect = canvas.getBoundingClientRect();
-            const mouseX = event.clientX - rect.left;
-            const mouseY = event.clientY - rect.top;
+            const scale = canvas.width / canvas.clientWidth;    // CSS size -> drawing size
+            const mouseX = (event.clientX - rect.left - canvas.clientLeft) * scale;
+            const mouseY = (event.clientY - rect.top - canvas.clientTop) * scale;
             let newHoveredDisk = null;
             for (let i = 0; i < disks.length; i++) {
                 const disk = disks[i];

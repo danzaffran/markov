@@ -6,12 +6,16 @@
     <title>Bike Loop Animation</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" crossorigin="anonymous">
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js" crossorigin="anonymous"></script>
+    <script>if (window.self !== window.top) document.documentElement.classList.add('embedded');</script>
     <style>
         :root {
             --cell: 52px;                          /* one square matrix cell */
             --matrix-w: calc(9 * var(--cell));     /* 1 header + 8 data columns */
-            --panel-w: calc(var(--matrix-w) + 32px);
+            --pad: 20px;
         }
+        /* Inside an iframe (e.g. Canvas LMS): thinner margins, page shows through */
+        .embedded { --pad: 8px; }
+        .embedded body { background-color: transparent; }
 
         body {
             margin: 0;
@@ -21,55 +25,96 @@
             min-height: 100vh;
             background-color: #e0e0e0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            padding: 20px;
+            padding: var(--pad);
             box-sizing: border-box;
         }
 
         #mainContainer {
             display: flex;
-            flex-direction: row;
-            flex-wrap: wrap;              /* panel drops below the canvas in narrow frames */
-            justify-content: center;
-            align-items: flex-start;
-            gap: 25px;
-            width: 100%;
-            max-width: calc(1026px + 25px + var(--panel-w));
-        }
-
-        #rightPanelColumn {
-            display: flex;
             flex-direction: column;
-            align-items: stretch;
-            gap: 20px;
-            width: var(--panel-w);
-            max-width: 100%;
+            align-items: center;
+            gap: 16px;
+            width: 100%;
+            max-width: 1024px;
         }
 
-        /* Scales down to fit the window (or an iframe, e.g. in Canvas LMS);
-           the drawing itself stays 1024 x 1024. */
+        /* The bikes get the full width, up to one screen tall; the play button
+           and the controls window float over the empty corners. */
+        #stage {
+            position: relative;
+            width: 100%;
+            max-width: min(1024px, calc(100vh - 2 * var(--pad)));
+        }
+
+        /* Scales down to fit; the drawing itself stays 1024 x 1024. */
         canvas {
-            flex: 1 1 400px;
-            min-width: 0;
-            max-width: min(1024px, calc(100vh - 40px));
+            display: block;
+            width: 100%;
             height: auto;
             aspect-ratio: 1 / 1;
+            box-sizing: border-box;
             border: 1px solid #ccc;
             background-color: #fff;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             border-radius: 8px;
         }
 
+        #playButton {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            width: 48px;
+            height: 48px;
+            padding: 0;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.92);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            color: #007bff;
+            cursor: pointer;
+            display: grid;
+            place-items: center;
+        }
+        #playButton:hover { background: #fff; color: #0056b3; }
+        #playButton:disabled { color: #aaa; cursor: not-allowed; }
+        #playButton svg { width: 22px; height: 22px; fill: currentColor; }
+        #playButton .iconPause,
+        #playButton.playing .iconPlay { display: none; }
+        #playButton.playing .iconPause { display: block; }
+
+        #controlsWindow {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+        }
+        #controlsWindow summary {
+            list-style: none;
+            margin-left: auto;
+            width: fit-content;
+            padding: 8px 14px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.92);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            font-size: 0.85em;
+            font-weight: 600;
+            color: #343a40;
+            cursor: pointer;
+            user-select: none;
+        }
+        #controlsWindow summary::-webkit-details-marker { display: none; }
+        #controlsWindow summary::after { content: " \25BE"; }
+        #controlsWindow[open] summary::after { content: " \25B4"; }
+
         #controls {
+            margin-top: 8px;
+            width: 220px;
             background: #f8f9fa;
-            padding: 12px 15px; 
+            padding: 14px;
             border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
             display: flex;
-            flex-direction: row;          /* horizontal, to save vertical space */
-            flex-wrap: wrap;
-            align-items: flex-end;
+            flex-direction: column;
             gap: 12px; 
-            width: 100%; 
             box-sizing: border-box;
             border: 1px solid #e0e0e0; 
         }
@@ -77,14 +122,11 @@
         #controls > div {
             display: flex;
             flex-direction: column;
-            flex: 0 0 auto;
         }
-        #controls > div.narrow { width: 74px; }             /* Bikes per Station, Pause */
-        #controls > div.grow { flex: 1 1 110px; min-width: 110px; }
 
         #controls label {
             margin-bottom: 5px; 
-            font-size: 0.72em;
+            font-size: 0.8em;
             line-height: 1.2;
             color: #343a40; 
             font-weight: 500;
@@ -107,31 +149,21 @@
 
 
         #controls button { 
-            flex: 0 0 auto;
-            width: 110px;
             padding: 7px 8px;
             color: white;
+            background-color: #6c757d;
             border: none;
             border-radius: 5px;
             cursor: pointer;
-            font-size: 0.75em;
+            font-size: 0.8em;
             line-height: 1.2;
             font-weight: 500;
             transition: background-color 0.2s ease, box-shadow 0.2s ease;
             text-align: center;
         }
-        #controls button#startButton {
-            background-color: #007bff; 
-        }
-        #controls button#startButton:hover {
-            background-color: #0056b3;
+        #controls button:hover {
+            background-color: #5a6268;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        #controls button#startButton:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-            color: #666666;
-            box-shadow: none;
         }
 
 
@@ -141,7 +173,7 @@
             border-radius: 8px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
             border: 1px solid #e0e0e0;
-            width: 100%; 
+            width: fit-content; 
             max-width: 100%; 
             overflow-x: auto; 
             box-sizing: border-box;
@@ -232,41 +264,50 @@
 </head>
 <body>
     <div id="mainContainer">
-        <canvas id="animationCanvas"></canvas>
-        <div id="rightPanelColumn">
-            <div id="controls">
-                <div class="narrow">
-                    <label for="initialDots">Bikes per Station: <span id="initialDotsValue">15</span></label>
-                    <input type="number" id="initialDots" min="1" max="100" value="15">
+        <div id="stage">
+            <canvas id="animationCanvas"></canvas>
+            <button id="playButton" aria-label="Play" disabled>
+                <svg class="iconPlay" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l13-7.5z"/></svg>
+                <svg class="iconPause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4.5v16H6zM13.5 4H18v16h-4.5z"/></svg>
+            </button>
+            <details id="controlsWindow">
+                <summary>Controls</summary>
+                <div id="controls">
+                    <div>
+                        <label for="initialDots">Bikes per Station: <span id="initialDotsValue">15</span></label>
+                        <input type="number" id="initialDots" min="1" max="100" value="15">
+                    </div>
+                    <div>
+                        <label for="pauseDuration">Wait between moves: <span id="pauseDurationValue">1.0</span>s</label>
+                        <input type="number" id="pauseDuration" min="0.1" max="10" step="0.1" value="1.0">
+                    </div>
+                    <div>
+                        <label for="dotSpeed">Bike Speed: <span id="dotSpeedValue">0.003</span></label>
+                        <input type="range" id="dotSpeed" min="0.001" max="0.05" step="0.001" value="0.003">
+                    </div>
+                    <button id="restartButton">Restart</button>
                 </div>
-                <div class="narrow">
-                    <label for="pauseDuration">Pause: <span id="pauseDurationValue">1.0</span>s</label>
-                    <input type="number" id="pauseDuration" min="0.1" max="10" step="0.1" value="1.0">
-                </div>
-                <div class="grow">
-                    <label for="dotSpeed">Bike Speed: <span id="dotSpeedValue">0.003</span></label>
-                    <input type="range" id="dotSpeed" min="0.001" max="0.05" step="0.001" value="0.003">
-                </div>
-                <button id="startButton" disabled>Start / Restart Animation</button>
-            </div>
-            <div id="matrixDisplayContainer">
-                <h3>Transition Matrix M</h3>
-                <div id="matrixMath" class="mathBlock"></div>
-            </div>
-            <div id="powerDisplayContainer">
-                <h3>After <span id="monthCount">0</span> months</h3>
-                <div id="powerMath" class="mathBlock"></div>
-                <p id="powerCaption">
-                    Each entry is the share of the bikes that <em>started</em> at the row's station
-                    and are parked at the column's station after
-                    <strong>k&nbsp;=&nbsp;<span id="captionK">0</span></strong> months.
-                    Every row totals 1.000, i.e. 100&nbsp;% (so 0.544 means 54.4&nbsp;%).
-                    The bikes on the left are one random sample of this process.
-                </p>
-            </div>
-            <div id="citationBox" style="padding: 15px; background-color: #f8f9fa; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid #e0e0e0; width: fit-content; max-width: 100%; box-sizing: border-box; margin-top: 20px;">
-                <p style="margin: 0; font-size: 0.9em; color: #343a40;"> &copy; Dan Zaffran, based on Sect. 7.2 Markov Chains, in <a href="https://lqbrin.github.io/tea-time-linear/" style="color: #007bff; text-decoration: none;">Tea Time Linear Algebra</a>, by Leon Brin.</p>
-            </div>
+            </details>
+        </div>
+        <div id="matrixDisplayContainer">
+            <h3>Transition Matrix M</h3>
+            <div id="matrixMath" class="mathBlock"></div>
+        </div>
+        <!-- M^k panel, removed from the page (its CSS and JS are still here; uncomment to bring it back)
+        <div id="powerDisplayContainer">
+            <h3>After <span id="monthCount">0</span> months</h3>
+            <div id="powerMath" class="mathBlock"></div>
+            <p id="powerCaption">
+                Each entry is the share of the bikes that <em>started</em> at the row's station
+                and are parked at the column's station after
+                <strong>k&nbsp;=&nbsp;<span id="captionK">0</span></strong> months.
+                Every row totals 1.000, i.e. 100&nbsp;% (so 0.544 means 54.4&nbsp;%).
+                The bikes on the left are one random sample of this process.
+            </p>
+        </div>
+        -->
+        <div id="citationBox" style="padding: 15px; background-color: #f8f9fa; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 1px solid #e0e0e0; width: fit-content; max-width: 100%; box-sizing: border-box;">
+            <p style="margin: 0; font-size: 0.9em; color: #343a40;"> &copy; Dan Zaffran, based on Sect. 7.2 Markov Chains, in <a href="https://lqbrin.github.io/tea-time-linear/" style="color: #007bff; text-decoration: none;">Tea Time Linear Algebra</a>, by Leon Brin.</p>
         </div>
     </div>
 
@@ -318,7 +359,8 @@
         const pauseDurationValueSpan = document.getElementById('pauseDurationValue');
         const dotSpeedSlider = document.getElementById('dotSpeed');
         const dotSpeedValueSpan = document.getElementById('dotSpeedValue');
-        const startButton = document.getElementById('startButton');
+        const playButton = document.getElementById('playButton');
+        const restartButton = document.getElementById('restartButton');
 
         const diskBackgroundImage = new Image(); 
         const bikeImages = [];
@@ -372,7 +414,7 @@
         function assetLoaded() {
             loadedAssetCount++;
             if (loadedAssetCount === totalAssetsToLoad) {
-                startButton.disabled = false;
+                playButton.disabled = false;
                 console.log("All assets loaded. Animation ready.");
                 if (animationPhase === 'IDLE') { 
                     initVisualsOnly(true); 
@@ -395,9 +437,7 @@
         initialDotsInput.addEventListener('input', (e) => {
             initialDotsPerDiskSetting = parseInt(e.target.value) || 15;
             initialDotsValueSpan.textContent = initialDotsPerDiskSetting;
-             if (!animationFrameId && dots.length > 0) { 
-                initVisualsOnly(true); 
-            }
+            if (dots.length > 0) resetBoard();     // new bikes, evenly spread, paused
         });
         pauseDurationInput.addEventListener('input', (e) => {
             pauseDurationSetting = parseFloat(e.target.value) || 1.0;
@@ -407,7 +447,8 @@
             dotSpeedSetting = parseFloat(e.target.value);
             dotSpeedValueSpan.textContent = dotSpeedSetting.toFixed(3);
         });
-        startButton.addEventListener('click', initAnimation);
+        playButton.addEventListener('click', togglePlay);
+        restartButton.addEventListener('click', resetBoard);
 
 
         function updateControlDisplayValues() {
@@ -782,6 +823,33 @@
             }
             lastTime = performance.now(); 
             animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function setPlaying(playing) {
+            playButton.classList.toggle('playing', playing);
+            playButton.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+        }
+        function togglePlay() {
+            if (animationFrameId) {                     // pause: bikes freeze where they are
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+                setPlaying(false);
+            } else if (animationPhase === 'IDLE') {     // first play, or after a restart
+                initAnimation();
+                setPlaying(true);
+            } else {                                    // resume
+                lastTime = performance.now();
+                animationFrameId = requestAnimationFrame(gameLoop);
+                setPlaying(true);
+            }
+        }
+        function resetBoard() {                         // bikes back to an even spread, paused
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+            animationPhase = 'IDLE';
+            isFirstStart = true;
+            initVisualsOnly(true);
+            setPlaying(false);
         }
 
         function initVisualsOnly(placeInitialDots = false) { 
